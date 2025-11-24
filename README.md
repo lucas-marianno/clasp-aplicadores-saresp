@@ -1,4 +1,4 @@
-# CLAPS - Alocação de Aplicadores
+# CLASP - Alocação de Aplicadores
 Full stack web app used by the Secretaria de Educação de São Bernardo do Campo. (PMSBC)
 
 This web app is used by over 75 schools across the municipality.
