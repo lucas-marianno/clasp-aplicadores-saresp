@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alocação de Aplicadores - Saresp</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        .btn-submit:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .custom-select {
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            background-repeat: no-repeat;
+            background-position: right 0.75rem center;
+            background-size: 16px 12px;
+        }
+
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 4px solid #3498db;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+
+<body class="bg-gray-100 text-gray-800 flex items-top justify-center min-h-screen pt-6 pb-12 px-6">
+
+    <div class="w-full max-w-7xl mx-auto bg-white rounded-2xl shadow-xl p-6 md:p-8">
+
+        <!-- Header -->
+        <div class="text-center mb-8">
+            <h1 class="text-gray-500 mt-2">Preencha os dados do diretor escolar e selecione uma EMEB para alocar os
+                aplicadores às turmas.</h1>
+        </div>
+
+        <!-- School Director Name -->
+        <div class="my-10">
+            <label for="school-director" class="block text-sm font-medium text-gray-700 mb-2">Nome do responsável pelo
+                preenchimento:
+                <span id="director-name-error" class="text-red-500 text-xs mt-1" style="display: none;">*</span>
+            </label>
+            <input id="school-director" name="school-director" type="text"
+                placeholder="Digite o nome completo do(a) diretor(a) da EMEB"
+                class="applicator-input w-full p-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                required></input>
+            <table class="w-full my-5">
+                <tr>
+                    <td>
+                        <label for="director-cpf" class="block text-sm font-medium text-gray-700">CPF:
+                            <span id="director-cpf-error" class="text-red-500 text-xs mt-1"
+                                style="display: none;">*</span>
+                        </label>
+                    </td>
+                    <td>
+                        <label for="director-matr" class="block text-sm font-medium text-gray-700">Matrícula:
+                            <span id="director-matr-error" class="text-red-500 text-xs mt-1"
+                                style="display: none;">*</span></label>
+                    </td>
+                </tr>
+                <tr>
+                    <td>
+                        <input id="director-cpf" name="director-cpf" type="text"
+                            placeholder="Digite o CPF do(a) diretor(a) da EMEB"
+                            class="applicator-input w-full p-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                            maxlength=11 minlength=11 required></input>
+                    </td>
+                    <td>
+                        <input id="director-matr" name="director-matr" type="text"
+                            placeholder="Digite a matrícula do(a) diretor(a) da EMEB"
+                            class="applicator-input w-full p-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                            maxlength=5 minlength=5 required></input>
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+        <!-- School Selector -->
+        <div class="mb-6">
+            <label for="school-select" class="block text-sm font-medium text-gray-700 mb-2">Selecione a EMEB:</label>
+            <select id="school-select"
+                class="custom-select w-full p-3 bg-gray-50 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
+                disabled>
+                <option value="">Carregando escolas...</option>
+            </select>
+        </div>
+
+        <!-- Applicators Table -->
+        <div id="applicators-table-container" class="overflow-x-auto">
+            <!-- Table will be dynamically inserted here -->
+        </div>
+        <div id="table-loader" class="flex justify-center items-center py-8" style="display: none;">
+            <div class="loader"></div>
+        </div>
+
+        <!-- Submit Button and Message Area -->
+        <div id="action-area" class="mt-8 text-center" style="display: none;">
+            <div id="message-area" class="my-4 font-medium" style="display: none;"></div>
+            <button id="submit-btn"
+                class="btn-submit bg-indigo-600 text-white font-bold py-3 px-8 rounded-lg shadow-md hover:bg-indigo-700 transition-all duration-300 ease-in-out">
+                ENVIAR DADOS
+            </button>
+        </div>
+
+    </div>
+
+    <script>
+        // --- Constants ---
+        const directorNameInput = document.getElementById('school-director');
+        const directorCpfInput = document.getElementById('director-cpf');
+        const directorMatrInput = document.getElementById('director-matr');
+
+        const directorNameError = document.getElementById('director-name-error');
+        const directorCpfError = document.getElementById('director-cpf-error');
+        const directorMatrError = document.getElementById('director-matr-error');
+
+        const schoolSelect = document.getElementById('school-select');
+        const tableContainer = document.getElementById('applicators-table-container');
+        const tableLoader = document.getElementById('table-loader');
+        const submitBtn = document.getElementById('submit-btn');
+        const messageArea = document.getElementById('message-area');
+        const actionArea = document.getElementById('action-area');
+
+        const REGEX_NUMBERS_ONLY = /^\d+$/;
+        const STYLE_ERROR_BORDER = ['border-red-500', 'focus:ring-red-500', 'focus:border-red-500'];
+        const STYLE_NEUTRAL_BORDER = ['border-gray-300', 'focus:ring-indigo-500', 'focus:border-indigo-500'];
+
+        // --- State Variables ---
+        let currentUserEmail = "";
+        let directorFieldsFilled = false;
+        let schoolsAreLoaded = false;
+
+        // --- Event Listeners ---
+        document.addEventListener('DOMContentLoaded', () => {
+            // Fetch the list of schools from the Google Apps Script backend on page load
+            google.script.run.withSuccessHandler(populateSchoolSelector).getSchools();
+
+            // Fetch the current user email
+            google.script.run.withSuccessHandler(currentUserHandler).getCurrentUserEmail();
+
+            // These listeners clear errors on input and check dropdown status
+            directorNameInput.addEventListener('input', checkDirectorFields);
+            directorCpfInput.addEventListener('input', checkDirectorFields);
+            directorMatrInput.addEventListener('input', checkDirectorFields);
+        });
+
+        // Failsafe validation when clicking the (potentially enabled) dropdown
+        schoolSelect.addEventListener('click', () => {
+            if (!validateDirectorsField()) {
+                schoolSelect.disabled = true;
+                return;
+            }
+        });
+
+        // Event listener for when a school is selected
+        schoolSelect.addEventListener('change', (e) => {
+            const selectedSchool = e.target.value;
+            tableContainer.innerHTML = ''; // Clear previous table
+            actionArea.style.display = 'none';
+            messageArea.style.display = 'none';
+
+            if (selectedSchool) {
+                tableLoader.style.display = 'flex'; // Show loader while fetching classes
+                google.script.run.withSuccessHandler(createApplicatorsTable).getClassesForSchool(selectedSchool);
+            }
+        });
+
+        // Event listener for the submit button
+        submitBtn.addEventListener('click', () => {
+            showMessage(" "); // clears any error messages
+
+            const directorName = directorNameInput.value.trim();
+            const directorCpf = directorCpfInput.value.trim();
+            const directorMatr = directorMatrInput.value.trim();
+
+            // Run validation and show UI errors
+            if (!validateDirectorsField()) {
+                showMessage('Por favor, corrija os campos destacados em vermelho.', 'error');
+                return;
+            }
+
+            const inputs = document.querySelectorAll('#applicators-table-container .applicator-input');
+            const collectedData = [];
+            const selectedSchool = schoolSelect.value;
+            const submissionTime = Date.now(); // Use one timestamp for the whole batch
+
+            inputs.forEach(input => {
+                const turma = input.dataset.turma;
+                const aplicador = input.value.trim();
+
+                if (aplicador) { // Only collect data if a name was entered
+                    collectedData.push({
+                        escola: selectedSchool,
+                        turma: turma,
+                        aplicador: aplicador,
+                        timestamp: submissionTime,
+                        diretor: directorName,
+                        diretor_cpf: Number(directorCpf),
+                        diretor_matr: Number(directorMatr),
+                        user_email: currentUserEmail
+                    });
+                }
+            });
+
+            if (collectedData.length > 0) {
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Enviando...';
+                google.script.run.withSuccessHandler(showSubmitMessage).saveApplicatorData(collectedData);
+            } else {
+                showMessage('Nenhum aplicador foi inserido. Preencha os campos para enviar.', 'error');
+            }
+        });
+
+        // --- Style & Validation Helpers (DRY) ---
+
+        /**
+         * Sets the error style and message for a field.
+         */
+        function setErrorStyles(inputEl, errorEl, message) {
+            inputEl.classList.remove(...STYLE_NEUTRAL_BORDER);
+            inputEl.classList.add(...STYLE_ERROR_BORDER);
+            errorEl.textContent = `* ${message}`;
+            errorEl.style.display = 'inline'; // Use 'inline' to match span behavior
+        }
+
+        /**
+         * Clears the error style and message for a field.
+         */
+        function clearErrorStyles(inputEl, errorEl) {
+            inputEl.classList.remove(...STYLE_ERROR_BORDER);
+            inputEl.classList.add(...STYLE_NEUTRAL_BORDER);
+            errorEl.style.display = 'none';
+        }
+
+        // --- Core Logic & UI Functions ---
+
+        /**
+         * Clears errors as user types (per original behavior)
+         * and updates dropdown state (using original flawed logic).
+         */
+        function checkDirectorFields() {
+            const name = directorNameInput.value.trim();
+            const cpf = directorCpfInput.value.trim();
+            const matr = directorMatrInput.value.trim();
+
+            // Part 1: Clear errors as user types
+            if (name) {
+                clearErrorStyles(directorNameInput, directorNameError);
+            }
+            if (cpf) {
+                clearErrorStyles(directorCpfInput, directorCpfError);
+            }
+            if (matr) {
+                clearErrorStyles(directorMatrInput, directorMatrError);
+            }
+
+            // Part 2: Update dropdown state (original simple check)
+            directorFieldsFilled = name && cpf && matr;
+            updateSchoolSelectDisabledState();
+        }
+
+        /**
+         * Runs full validation and shows UI errors.
+         * Returns true if valid, false otherwise.
+         */
+        function validateDirectorsField() {
+            const directorName = directorNameInput.value.trim();
+            const directorCpf = directorCpfInput.value.trim();
+            const directorMatr = directorMatrInput.value.trim();
+            let isDirectorFieldValid = true;
+
+            // --- Validate Name ---
+            if (!directorName) {
+                setErrorStyles(directorNameInput, directorNameError, 'Obrigatório');
+                isDirectorFieldValid = false;
+            }
+
+            // --- Validate CPF ---
+            if (!directorCpf) {
+                setErrorStyles(directorCpfInput, directorCpfError, 'Obrigatório');
+                isDirectorFieldValid = false;
+            } else if (!REGEX_NUMBERS_ONLY.test(directorCpf)) {
+                setErrorStyles(directorCpfInput, directorCpfError, 'Deve conter apenas números');
+                isDirectorFieldValid = false;
+            } else if (directorCpf.length !== 11) {
+                setErrorStyles(directorCpfInput, directorCpfError, 'Deve conter exatamente 11 números');
+                isDirectorFieldValid = false;
+            }
+
+            // --- Validate Matrícula ---
+            if (!directorMatr) {
+                setErrorStyles(directorMatrInput, directorMatrError, 'Obrigatório');
+                isDirectorFieldValid = false;
+            } else if (!REGEX_NUMBERS_ONLY.test(directorMatr)) {
+                setErrorStyles(directorMatrInput, directorMatrError, 'Deve conter apenas números');
+                isDirectorFieldValid = false;
+            } else if (directorMatr.length !== 5) {
+                setErrorStyles(directorMatrInput, directorMatrError, 'Deve conter exatamente 5 números');
+                isDirectorFieldValid = false;
+            }
+
+            return isDirectorFieldValid;
+        }
+
+        /**
+         * Central function to control the selector's state.
+         */
+        function updateSchoolSelectDisabledState() {
+            schoolSelect.disabled = !(directorFieldsFilled && schoolsAreLoaded);
+        }
+
+        /**
+         * Populates the school dropdown with data from the backend.
+         */
+        function populateSchoolSelector(schools) {
+            schoolSelect.innerHTML = '<option value="">-- Escolha uma escola --</option>'; // Clear loading message
+            schools.forEach(school => {
+                const option = document.createElement('option');
+                option.value = school;
+                option.textContent = school;
+                schoolSelect.appendChild(option);
+            });
+
+            schoolsAreLoaded = true; // Set the loaded state to true
+            updateSchoolSelectDisabledState(); // Now check if it should be enabled
+        }
+
+        /**
+         * Handles the response after submitting data.
+         */
+        function showSubmitMessage(response) {
+            showMessage(response.message, response.status);
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'ENVIAR DADOS';
+            if (response.status === 'success') {
+                // This line is preserved from original code, as requested.
+                document.querySelectorAll('.applicator-input').forEach(input => `${input}`.toUpperCase());
+            }
+        }
+
+        /**
+         * Creates and inserts the dynamic applicators table.
+         */
+        function createApplicatorsTable(classes) {
+            tableLoader.style.display = 'none';
+            const table = document.createElement('table');
+            table.className = 'min-w-full divide-y divide-gray-200 rounded-lg border';
+
+            table.style.tableLayout = 'fixed';
+            table.innerHTML = `
+                <colgroup>
+                <col style="width: 15%">
+                <col style="width: 65%">
+                <col style="width: 25%">
+                </colgroup>
+                <thead class="bg-gray-50">
+                <tr>
+                    <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Turma</th>
+                    <th scope="col" class="px-6 pl-8 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aplicador</th>
+                    <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Última atualização</th>
+                </tr>
+                </thead>
+            `;
+
+            const tbody = document.createElement('tbody');
+            tbody.className = 'bg-white divide-y divide-gray-200';
+
+            classes.forEach(cls => {
+                const row = tbody.insertRow(); // Cleaner than createElement
+                row.className = 'hover:bg-gray-50';
+
+                // Cell 1: Turma
+                const cell1 = row.insertCell();
+                cell1.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-900';
+                cell1.style.fontSize = 'small';
+                cell1.textContent = cls[2]; // Turma
+
+                // Cell 2: Aplicador (Input)
+                const cell2 = row.insertCell();
+                cell2.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-500';
+                cell2.style.fontSize = 'small';
+
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.className = 'applicator-input w-full p-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500';
+                input.placeholder = 'Digite o NOME COMPLETO do aplicador';
+                input.setAttribute('data-turma', cls[2]);
+                input.value = (cls[3] || '').toUpperCase(); // Aplicador
+                cell2.appendChild(input);
+
+                // Cell 3: Última atualização
+                const cell3 = row.insertCell();
+                const dateStr = (cls[5] || '').toString();
+                cell3.className = 'whitespace text-center text-sm text-gray-400';
+                cell3.style.fontSize = 'small';
+                if (dateStr.length > 0) {
+                    const date = new Date(Number.parseInt(dateStr));
+                    cell3.textContent = date.toLocaleString('pt-BR'); // Formatted date
+                } else {
+                    cell3.textContent = '';
+                }
+            });
+
+            table.appendChild(tbody);
+            tableContainer.appendChild(table);
+            actionArea.style.display = 'block';
+        }
+
+        /**
+         * Helper function to display messages to the user.
+         */
+        function showMessage(text, type) {
+            messageArea.textContent = text;
+            const colorClass = type === 'success' ? 'text-green-600'
+                : type === 'error' ? 'text-red-600'
+                    : 'text-grey-900';
+            messageArea.className = `my-4 ${colorClass} font-medium`;
+            messageArea.style.display = 'block';
+        }
+
+        /**
+         * Handler that saves the received email
+         */
+        function currentUserHandler(email) {
+            if (typeof email === "string" && email.length > 0) {
+                currentUserEmail = email;
+            }
+        }
+    </script>
+
+</body>
+
+</html>
